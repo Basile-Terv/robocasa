@@ -641,10 +641,16 @@ class Counter(ProcGenFixture):
                 for offset, g in zip(fixture_to_geom_offsets, all_geoms):
                     if offset[0] > 0.30:
                         valid_geoms.append(g)
+                if len(valid_geoms)==0:
+                    print("Adding the last offset due to no valid region in right",offset)
+                    valid_geoms.append(g)
             elif loc == "left":
                 for offset, g in zip(fixture_to_geom_offsets, all_geoms):
                     if offset[0] < -0.30:
                         valid_geoms.append(g)
+                if len(valid_geoms)==0:
+                    print("Adding the last offset due to no valid region in left",offset)
+                    valid_geoms.append(g)
             elif loc == "left_right":
                 for offset, g in zip(fixture_to_geom_offsets, all_geoms):
                     if np.abs(offset[0]) > 0.30:

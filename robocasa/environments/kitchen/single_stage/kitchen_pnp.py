@@ -1,5 +1,11 @@
 from robocasa.environments.kitchen.kitchen import *
 
+from collections import defaultdict
+
+import numpy as np
+
+from robocasa.models.objects.kitch_min_obj import OBJ_CATEGORIES, OBJ_GROUPS
+
 
 class PnP(Kitchen):
     """
@@ -90,7 +96,7 @@ class PnPCounterToCab(PnP):
                     ),
                     size=(0.60, 0.30),
                     pos=(0.0, -1.0),
-                    offset=(0.0, 0.10),
+                    offset=(0.0, -0.01),
                 ),
             )
         )
@@ -134,9 +140,18 @@ class PnPCounterToCab(PnP):
         Returns:
             bool: True if the task is successful, False otherwise
         """
-        obj_inside_cab = OU.obj_inside_of(self, "obj", self.cab)
-        gripper_obj_far = OU.gripper_obj_far(self)
-        return obj_inside_cab and gripper_obj_far
+        # obj_inside_cab = OU.obj_inside_of(self, "obj", self.cab)
+        # gripper_obj_far = OU.gripper_obj_far(self)
+        # return obj_inside_cab and gripper_obj_far
+        obj = self.objects["obj"]
+        start_pos = self.sim.data.body_xpos[
+            self.obj_body_id[self.objects["distr_counter"].name]
+        ]
+        obj_pos = np.array(self.sim.data.body_xpos[self.obj_body_id[obj.name]])
+        obj_z = obj_pos[2]
+        obj_lifted = obj_z >= 1.1
+
+        return obj_lifted
 
 
 class PnPCabToCounter(PnP):
@@ -281,7 +296,7 @@ class PnPCounterToSink(PnP):
             "counter",
             dict(id=FixtureType.COUNTER, ref=self.sink),
         )
-        self.init_robot_base_pos = self.sink
+        self.init_robot_base_pos = self.counter
 
     def get_ep_meta(self):
         """
@@ -312,29 +327,69 @@ class PnPCounterToSink(PnP):
                 placement=dict(
                     fixture=self.counter,
                     sample_region_kwargs=dict(
-                        ref=self.sink,
+                        ref=self.counter,
                         loc="left_right",
                     ),
                     size=(0.30, 0.40),
-                    pos=("ref", -1.0),
+                    pos=("ref", -1.01),
+                    offset=(0.0, -0.01),
                 ),
             )
         )
-
+        exclude_cats = [self.obj_category] if hasattr(self, "obj_category") else []
         # distractors
         cfgs.append(
             dict(
                 name="distr_counter",
-                obj_groups="all",
+                obj_groups=self.obj_groups,
+                exclude_obj_groups=exclude_cats,
+                split="B",
                 placement=dict(
                     fixture=self.counter,
                     sample_region_kwargs=dict(
                         ref=self.sink,
                         loc="left_right",
                     ),
+                    size=(0.30, 0.40),
+                    pos=("ref", 0.1),
+                    offset=(0.3, -0.001),
+                ),
+            )
+        )
+        cfgs.append(
+            dict(
+                name="distr_counter_2",
+                obj_groups=self.obj_groups,
+                exclude_obj_groups=exclude_cats,
+                split="B",
+                placement=dict(
+                    fixture=self.sink,
+                    sample_region_kwargs=dict(
+                        ref=self.sink,
+                        loc="left_right",
+                    ),
+                    size=(0.30, 0.40),
+                    pos=(0.1, -0.1),
+                    offset=(0.0, 0.0),
+                ),
+            )
+        )
+        cfgs.append(
+            dict(
+                name="distr_counter_3",
+                obj_groups=self.obj_groups,
+                exclude_obj_groups=exclude_cats,
+                split="B",
+                graspable=False,
+                placement=dict(
+                    fixture=self.sink,
+                    sample_region_kwargs=dict(
+                        ref=self.sink,
+                        loc="left_right",
+                    ),
                     size=(0.30, 0.30),
-                    pos=("ref", -1.0),
-                    offset=(0.0, 0.30),
+                    pos=(0.1, 0.3),
+                    offset=(0.0, 0.0),
                 ),
             )
         )
@@ -342,6 +397,7 @@ class PnPCounterToSink(PnP):
             dict(
                 name="distr_sink",
                 obj_groups="all",
+                exclude_obj_groups=exclude_cats,
                 washable=True,
                 placement=dict(
                     fixture=self.sink,
@@ -361,9 +417,474 @@ class PnPCounterToSink(PnP):
         Returns:
             bool: True if the task is successful, False otherwise
         """
+        ######### LIFT SUCCESS CONDITION ###################
+        # obj = self.objects["obj"]
+        # start_pos = self.sim.data.body_xpos[
+        #     self.obj_body_id[self.objects["distr_counter"].name]
+        # ]
+        # obj_pos = np.array(self.sim.data.body_xpos[self.obj_body_id[obj.name]])
+        # obj_z = obj_pos[2]
+        # obj_lifted = obj_z >= 1.1
+
+        # return obj_lifted
+        ######################################################
         obj_in_sink = OU.obj_inside_of(self, "obj", self.sink, partial_check=True)
-        gripper_obj_far = OU.gripper_obj_far(self)
-        return obj_in_sink and gripper_obj_far
+        # gripper_obj_far = OU.gripper_obj_far(self)
+        return obj_in_sink
+
+
+class PnPLift(PnP):
+    """
+    Class encapsulating the atomic counter to sink pick and place task
+
+    Args:
+        obj_groups (str): Object groups to sample the target object from.
+    """
+
+    def __init__(self, obj_groups="all", *args, **kwargs):
+
+        super().__init__(obj_groups=obj_groups, *args, **kwargs)
+
+    def _setup_kitchen_references(self):
+        """
+        Setup the kitchen references for the counter to sink pick and place task:
+        The sink to place object in and the counter to initialize it on
+        """
+        super()._setup_kitchen_references()
+        self.sink = self.register_fixture_ref(
+            "sink",
+            dict(id=FixtureType.SINK),
+        )
+        self.counter = self.register_fixture_ref(
+            "counter",
+            dict(id=FixtureType.COUNTER, ref=self.sink),
+        )
+
+        self.init_robot_base_pos = self.sink
+
+    def get_ep_meta(self):
+        """
+        Get the episode metadata for the counter to sink pick and place task.
+        This includes the language description of the task.
+        """
+        ep_meta = super().get_ep_meta()
+        obj_lang = self.get_obj_lang()
+        ep_meta["lang"] = f"pick the {obj_lang} from the counter"
+        return ep_meta
+
+    def _get_obj_cfgs(self):
+        """
+        Get the object configurations for the counter to sink pick and place task.
+        Puts the target object in the front area of the counter. Puts a distractor object on the counter
+        and the sink.
+        """
+        cfgs = []
+        cfgs.append(
+            dict(
+                name="obj",
+                obj_groups=self.obj_groups,
+                exclude_obj_groups=self.exclude_obj_groups,
+                graspable=True,
+                split="A",
+                placement=dict(
+                    fixture=self.counter,
+                    sample_region_kwargs=dict(
+                        ref=self.sink,
+                        loc="left",
+                    ),
+                    size=(0.30, 0.40),
+                    pos=("ref", -1.01),
+                    offset=(0.0, -0.01),
+                ),
+            )
+        )
+
+        # distractors
+        cfgs.append(
+            dict(
+                name="distr_counter",
+                obj_groups=self.obj_groups,
+                split="B",
+                placement=dict(
+                    fixture=self.counter,
+                    sample_region_kwargs=dict(
+                        ref=self.sink,
+                        loc="left_right",
+                    ),
+                    size=(0.30, 0.40),
+                    pos=("ref", 0.1),
+                    offset=(0.3, -0.001),
+                ),
+            )
+        )
+        cfgs.append(
+            dict(
+                name="distr_counter_2",
+                obj_groups=self.obj_groups,
+                split="B",
+                placement=dict(
+                    fixture=self.sink,
+                    sample_region_kwargs=dict(
+                        ref=self.sink,
+                        loc="left_right",
+                    ),
+                    size=(0.30, 0.40),
+                    pos=(0.1, -0.1),
+                    offset=(0.0, 0.0),
+                ),
+            )
+        )
+        cfgs.append(
+            dict(
+                name="distr_counter_3",
+                obj_groups=self.obj_groups,
+                split="B",
+                graspable=False,
+                placement=dict(
+                    fixture=self.sink,
+                    sample_region_kwargs=dict(
+                        ref=self.sink,
+                        loc="left_right",
+                    ),
+                    size=(0.30, 0.30),
+                    pos=(0.1, 0.3),
+                    offset=(0.0, 0.0),
+                ),
+            )
+        )
+        cfgs.append(
+            dict(
+                name="distr_counter_4",
+                obj_groups=self.obj_groups,
+                split="B",
+                placement=dict(
+                    fixture=self.counter,
+                    sample_region_kwargs=dict(
+                        ref=self.sink,
+                        loc="left_right",
+                    ),
+                    size=(0.30, 0.30),
+                    pos=(0.3, 0.1),
+                    offset=(0.0, 0.30),
+                ),
+            )
+        )
+
+        return cfgs
+
+    def _check_success(self):
+        """
+        Check if the counter to sink pick and place task is successful.
+        Checks if the object is inside the sink and the gripper is far from the object.
+
+        Returns:
+            bool: True if the task is successful, False otherwise
+        """
+        obj = self.objects["obj"]
+        start_pos = self.sim.data.body_xpos[
+            self.obj_body_id[self.objects["distr_counter"].name]
+        ]
+        obj_pos = np.array(self.sim.data.body_xpos[self.obj_body_id[obj.name]])
+        obj_z = obj_pos[2]
+        obj_lifted = obj_z >= self.counter.height + 0.15
+
+        return obj_lifted
+
+
+class PnPCounterTop(PnP):
+    """
+    Class encapsulating the atomic counter to sink pick and place task
+
+    Args:
+        obj_groups (str): Object groups to sample the target object from.
+    """
+
+    def __init__(self, obj_groups="all", *args, **kwargs):
+
+        self.actions_meta = defaultdict(list)
+
+        super().__init__(obj_groups=obj_groups, *args, **kwargs)
+
+        self.current_task_segment = 0
+
+    def _setup_kitchen_references(self):
+        """
+        Setup the kitchen references for the counter to sink pick and place task:
+        The sink to place object in and the counter to initialize it on
+        """
+        super()._setup_kitchen_references()
+        self.sink = self.register_fixture_ref("wall", dict(id=FixtureType.SINK))
+        self.counter = self.register_fixture_ref(
+            "counter",
+            dict(id=FixtureType.COUNTER, ref=self.sink),
+        )
+
+        self.init_robot_base_pos = self.counter
+        self.obj_up_once = False
+        self.current_task_segment = 0
+
+    def get_ep_meta(self):
+        """
+        Get the episode metadata for the counter to sink pick and place task.
+        This includes the language description of the task.
+        """
+        ep_meta = super().get_ep_meta()
+        obj_lang = self.get_obj_lang()
+        ep_meta["lang"] = f"pick the {obj_lang} from the counter"
+        return ep_meta
+
+    def _get_obj_cfgs(self):
+        """
+        Get the object configurations for the counter to sink pick and place task.
+        Puts the target object in the front area of the counter. Puts a distractor object on the counter
+        and the sink.
+        """
+        cfgs = []
+        cfgs.append(
+            dict(
+                name="obj",
+                obj_groups=self.obj_groups,
+                exclude_obj_groups=self.exclude_obj_groups,
+                graspable=True,
+                split="A",
+                placement=dict(
+                    fixture=self.counter,
+                    sample_region_kwargs=dict(
+                        ref=self.counter,
+                        loc="left",
+                    ),
+                    size=(0.10, 0.10),
+                    pos=("ref", -1.0),
+                    offset=(0.0, 0.2),
+                ),
+            )
+        )
+        exclude_cats = [self.obj_category] if hasattr(self, "obj_category") else []
+        # distractors
+        self.use_distractors = False
+        if self.use_distractors:
+            cfgs.append(
+                dict(
+                    name="distr_counter_left_1",
+                    obj_groups=self.obj_groups,
+                    split="B",
+                    exclude_obj_groups=exclude_cats,
+                    placement=dict(
+                        fixture=self.counter,
+                        sample_region_kwargs=dict(
+                            ref=self.counter,
+                            loc="left",
+                        ),
+                        size=(0.60, 0.30),
+                        pos=("ref", -1.0),
+                        offset=(0.00, 0.0),
+                    ),
+                )
+            )
+            cfgs.append(
+                dict(
+                    name="distr_counter_right_1",
+                    obj_groups=self.obj_groups,
+                    exclude_obj_groups=exclude_cats,
+                    split="B",
+                    placement=dict(
+                        fixture=self.counter,
+                        sample_region_kwargs=dict(
+                            ref=self.counter,
+                            loc="right",
+                        ),
+                        size=(0.60, 0.30),
+                        pos=("ref", -1.0),
+                        offset=(0.00, 0.0),
+                    ),
+                )
+            )
+            cfgs.append(
+                dict(
+                    name="distr_counter_left_2",
+                    obj_groups=self.obj_groups,
+                    split="B",
+                    exclude_obj_groups=exclude_cats,
+                    placement=dict(
+                        fixture=self.counter,
+                        sample_region_kwargs=dict(
+                            ref=self.sink,
+                            loc="left",
+                        ),
+                        size=(0.6, 0.3),
+                        pos=("ref", -0.9),
+                        offset=(0.00, 0.03),
+                    ),
+                )
+            )
+            cfgs.append(
+                dict(
+                    name="distr_counter_right_2",
+                    obj_groups=self.obj_groups,
+                    exclude_obj_groups=exclude_cats,
+                    split="B",
+                    placement=dict(
+                        fixture=self.counter,
+                        sample_region_kwargs=dict(
+                            ref=self.counter,
+                            loc="right",
+                        ),
+                        size=(0.60, 0.30),
+                        pos=("ref", -0.9),
+                        offset=(0.00, 0.03),
+                    ),
+                )
+            )
+            cfgs.append(
+                dict(
+                    name="distr_counter_sink_1",
+                    obj_groups=self.obj_groups,
+                    exclude_obj_groups=exclude_cats,
+                    split="B",
+                    graspable=False,
+                    placement=dict(
+                        fixture=self.sink,
+                        sample_region_kwargs=dict(
+                            ref=self.sink,
+                            loc="left_right",
+                        ),
+                        size=(0.30, 0.30),
+                        pos=(0.0, 0.0),
+                        offset=(0.0, 0.0),
+                    ),
+                )
+            )
+
+        return cfgs
+
+    def _current_obj_location(self):
+        """
+        Get the current location of the object.
+        """
+        obj = self.objects["obj"]
+        obj_pos = np.array(self.sim.data.body_xpos[self.obj_body_id[obj.name]])
+        return obj_pos
+
+    def _check_success(self):
+        """
+        Check if the counter to sink pick and place task is successful.
+        Checks if the object is inside the sink and the gripper is far from the object.
+
+        Returns:
+            bool: True if the task is successful, False otherwise
+        """
+
+        print(f"self.current_task_segment:{self.current_task_segment}")
+
+        obj = self.objects["obj"]
+        # start_pos = self.sim.data.body_xpos[
+        #     self.obj_body_id[self.objects["distr_counter"].name]
+        # ]
+        object_x = self.object_placements["obj"][0][1]
+        object_ort = self.object_placements["obj"][1]
+        obj_pos = np.array(self.sim.data.body_xpos[self.obj_body_id[obj.name]])
+        obj_z = obj_pos[2]
+        if not hasattr(self, "obj_initial_height"):
+            self.obj_initial_height = obj_z
+        obj_ort = np.array(self.sim.data.body_xquat[self.obj_body_id[obj.name]])
+        hand_pos = np.array(
+            self.sim.data.body_xpos[
+                self.sim.model.body_name2id(self.robots[0].gripper["right"].root_body)
+            ]
+        )
+        robot_pos = np.array(
+            self.sim.data.body_xpos[self.sim.model.body_name2id("mobilebase0_base")]
+        )
+        robot_quat = np.array(
+            self.sim.data.body_xquat[self.sim.model.body_name2id("mobilebase0_base")]
+        )
+        distance = (
+            sum((a - b) ** 2 for a, b in zip(obj_pos, self.object_placements["obj"][0]))
+        ) ** 0.5
+        # print(f"distance:{distance}")
+        obj_move = distance >= 0.1
+
+        if np.linalg.norm(hand_pos - obj_pos) < 0.2 and self.current_task_segment == 0:
+            self.current_task_segment = 1
+
+        obj_on_counter = OU.check_obj_fixture_contact(self, "obj", self.counter)
+        drop_condition = self.check_contact(
+            self.robots[0].gripper["right"], self.objects["obj"]
+        )
+        if obj_pos[2] >= self.obj_initial_height + 0.05:
+            obj_up = True
+        else:
+            obj_up = False
+
+        # Track if the object has ever been up at least once
+        if not hasattr(self, "obj_up_once"):
+            self.obj_up_once = False
+
+        if obj_up and drop_condition:
+            print("Object has been lifted at least once")
+            self.obj_up_once = True
+
+        if self.current_task_segment == 1 and self.obj_up_once:
+            self.current_task_segment = 2
+
+        # print(f" Checking: Obj Up once{self.obj_up_once},obj_move:{obj_move},obj on counter:{obj_on_counter},drop condition:{drop_condition}")
+        self.actions_meta["target_pick_obj_pos"].append(
+            self.object_placements["obj"][0]
+        )
+        self.actions_meta["target_pick_obj_ort"].append(
+            self.object_placements["obj"][1]
+        )
+        self.actions_meta["current_eef_pose"].append(hand_pos)
+        self.actions_meta["obj_eef_contact"].append(drop_condition)
+        self.actions_meta["obj_counter_contact"].append(obj_on_counter)
+        self.actions_meta["current_mobile_base_pos"].append(robot_pos)
+        self.actions_meta["current_mobile_base_quat"].append(robot_quat)
+        self.actions_meta["current_obj_pos"].append(obj_pos)
+        self.actions_meta["current_obj_rot"].append(obj_ort)
+        self.actions_meta["current_task_segment"].append(self.current_task_segment)
+        print(f"hand_pos: {hand_pos}")
+        print(f"target_pick_obj_pos: {self.object_placements['obj'][0]}")
+        print(f"current_obj_pos: {obj_pos}")
+
+        success = (
+            self.obj_up_once and obj_move and obj_on_counter and not drop_condition
+        )
+        self.actions_meta["success"].append(success)
+
+        if not self.obj_up_once:
+            return False
+
+        if not obj_move:
+            return False
+
+        if not hasattr(self, "obj_on_counter_frames"):
+            self.obj_on_counter_frames = 0
+        if self.mode == 1:
+            if obj_on_counter:
+                self.obj_on_counter_frames += 1
+            else:
+                self.obj_on_counter_frames = 0
+            print("number of frames counted", self.obj_on_counter_frames)
+            # Require obj_on_counter to be True for 1000 consecutive frames
+            if self.obj_on_counter_frames < 1:
+                return False
+        else:
+            if obj_on_counter:
+                self.obj_on_counter_frames += 1
+            else:
+                self.obj_on_counter_frames = 0
+            print("number of frames counted", self.obj_on_counter_frames)
+            # Require obj_on_counter to be True for 50 consecutive frames
+            if self.obj_on_counter_frames < 1:
+                return False
+
+        if drop_condition:
+            return False
+
+        return True
+
+    def actions_meta(self):
+        return self.actions_meta
 
 
 class PnPSinkToCounter(PnP):

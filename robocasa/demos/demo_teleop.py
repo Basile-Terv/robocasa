@@ -3,13 +3,18 @@ import json
 import time
 from collections import OrderedDict
 
-import robosuite
-from robosuite.controllers import load_composite_controller_config
-from robosuite.wrappers import VisualizationWrapper
-from termcolor import colored
-
 import robocasa.macros as macros
-from robocasa.scripts.collect_demos import collect_human_trajectory
+
+import robosuite
+from pynput.keyboard import Controller, Key, Listener
+from robocasa.scripts.collect_demos import (
+    collect_human_trajectory,
+    gather_demonstrations_as_hdf5,
+)
+from robocasa.utils.robomimic.robomimic_dataset_utils import convert_to_robomimic_format
+from robosuite.controllers import load_composite_controller_config
+from robosuite.wrappers import DataCollectionWrapper, VisualizationWrapper
+from termcolor import colored
 
 
 def choose_option(
@@ -87,6 +92,7 @@ if __name__ == "__main__":
             ("RestockPantry", "restock cans in pantry"),
             ("PreSoakPan", "prepare pan for washing"),
             ("PrepareCoffee", "make coffee"),
+            ("PnPCounterTop", "pick and place"),
         ]
     )
 
@@ -94,22 +100,23 @@ if __name__ == "__main__":
         args.task = choose_option(
             tasks, "task", default="PnPCounterToCab", show_keys=True
         )
-    robots = OrderedDict([(0, "PandaOmron"), (1, "GR1FloatingBody")])
+    robots = OrderedDict([(0, "TMR_ROBOT"), (1, "PandaOmron")])
 
     if args.robot is None:
         robot_choice = choose_option(
-            robots, "robot", default=0, default_message="PandaOmron"
+            robots, "robot", default=0, default_message="TMR_ROBOT"
         )
         args.robot = robots[robot_choice]
 
     # Create argument configuration
+    print("THE ROBOT IS: ", args.robot)
     config = {
         "env_name": args.task,
         "robots": args.robot,
         "controller_configs": load_composite_controller_config(robot=args.robot),
-        "layout_ids": args.layout,
-        "style_ids": args.style,
-        "translucent_robot": True,
+        # "layout_ids": args.layout,
+        # "style_ids": args.style,
+        "translucent_robot": False,
     }
 
     args.renderer = "mjviewer"
@@ -119,11 +126,21 @@ if __name__ == "__main__":
         **config,
         has_renderer=True,
         has_offscreen_renderer=False,
-        render_camera="robot0_frontview",
+        render_camera="robot0_robotview",
         ignore_done=True,
         use_camera_obs=False,
-        control_freq=20,
+        control_freq=10,
         renderer=args.renderer,
+        camera_heights=300,  # set camera height
+        camera_widths=480,  # set camera width
+        camera_names=[
+            "robot0_robotview",
+            "robot0_leftview",
+            "robot0_rightview",
+        ],  # use "agentview" camera
+        camera_depths=True,
+        use_distractors=True,
+        mode=1,
     )
 
     # Wrap this with visualization wrapper
@@ -149,16 +166,51 @@ if __name__ == "__main__":
         )
     else:
         raise ValueError
+    tmp_directory = "./robocasa_data/teleop_data/kitchen/driod_0922_batch5"
+    env = DataCollectionWrapper(env, tmp_directory)
+    recording_enabled = False
 
-    # collect demonstrations
-    while True:
-        ep_directory, discard_traj = collect_human_trajectory(
-            env,
-            device,
-            "right",
-            "single-arm-opposed",
-            mirror_actions=True,
-            render=(args.renderer != "mjviewer"),
-            max_fr=30,
-        )
-        print()
+    def _on_key_press(key):
+        """
+        Handles key press events to toggle recording.
+        """
+        global recording_enabled
+        try:
+            if key.char == "v":
+                recording_enabled = not recording_enabled
+                if recording_enabled:
+                    print("Recording started...")
+                else:
+                    print("Recording stopped. Flushing data...")
+                    env._flush()
+        except AttributeError:
+            pass
+
+    listener = Listener(on_press=_on_key_press)
+    listener.start()
+    # # collect demonstrations
+    excluded_eps = []
+    try:
+        while True:
+            ep_directory, discard_traj = collect_human_trajectory(
+                env,
+                device,
+                "right",
+                "TwoArm",
+                mirror_actions=True,
+                render=(args.renderer != "mjviewer"),
+                max_fr=30,
+            )
+            if recording_enabled:
+                print("Recording started and ENABLED")
+
+                path = gather_demonstrations_as_hdf5(
+                    ep_directory, tmp_directory, env_info
+                )
+                excluded_eps.append(ep_directory.split("/")[-1])
+                convert_to_robomimic_format(path)
+
+            print()
+    except KeyboardInterrupt:
+        print("\nInterrupted. Saving and exiting.")
+        exit(0)

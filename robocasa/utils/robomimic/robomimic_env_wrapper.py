@@ -9,6 +9,7 @@ from copy import deepcopy
 
 import robosuite
 import robocasa.utils.robomimic.robomimic_obs_utils as ObsUtils
+from robocasa.scripts.playback_utils import _apply_ep_meta_and_reset, _prepare_xml, update_mjcf_paths, path_change
 
 
 class EnvRobocasa:
@@ -62,7 +63,7 @@ class EnvRobocasa:
             ignore_done=True,
             use_object_obs=True,
             use_camera_obs=use_image_obs,
-            camera_depths=False,
+            camera_depths=True,
         )
         kwargs.update(update_kwargs)
 
@@ -171,27 +172,39 @@ class EnvRobocasa:
             else:
                 ep_meta = {}
 
-            if hasattr(
-                self.env, "set_attrs_from_ep_meta"
-            ):  # older versions had this function
-                self.env.set_attrs_from_ep_meta(ep_meta)
-            elif hasattr(self.env, "set_ep_meta"):  # newer versions
-                self.env.set_ep_meta(ep_meta)
-            # this reset is necessary.
-            # while the call to env.reset_from_xml_string does call reset,
-            # that is only a "soft" reset that doesn't actually reload the model.
-            self.reset(unset_ep_meta=False)
-            robosuite_version_id = int(robosuite.__version__.split(".")[1])
-            if robosuite_version_id <= 3:
-                from robosuite.utils.mjcf_utils import postprocess_model_xml
+            try:
+                _apply_ep_meta_and_reset(self.env, ep_meta)
+                xml = _prepare_xml(self.env, state["model"])
+                self.env.reset_from_xml_string(xml)
+            except (FileNotFoundError, PermissionError):
+                if "object_cfgs" in ep_meta:
+                    ep_meta["object_cfgs"] = update_mjcf_paths(ep_meta["object_cfgs"])
+                _apply_ep_meta_and_reset(self.env, ep_meta)
+                xml = _prepare_xml(self.env, state["model"])
+                xml = path_change(xml)
+                self.env.reset_from_xml_string(xml)
 
-                xml = postprocess_model_xml(state["model"])
-            else:
-                # v1.4 and above use the class-based edit_model_xml function
-                xml = self.env.edit_model_xml(state["model"])
+            # if hasattr(
+            #     self.env, "set_attrs_from_ep_meta"
+            # ):  # older versions had this function
+            #     self.env.set_attrs_from_ep_meta(ep_meta)
+            # elif hasattr(self.env, "set_ep_meta"):  # newer versions
+            #     self.env.set_ep_meta(ep_meta)
+            # # this reset is necessary.
+            # # while the call to env.reset_from_xml_string does call reset,
+            # # that is only a "soft" reset that doesn't actually reload the model.
+            # self.reset(unset_ep_meta=False)
+            # robosuite_version_id = int(robosuite.__version__.split(".")[1])
+            # if robosuite_version_id <= 3:
+            #     from robosuite.utils.mjcf_utils import postprocess_model_xml
 
-            self.env.reset_from_xml_string(xml)
-            self.env.sim.reset()
+            #     xml = postprocess_model_xml(state["model"])
+            # else:
+            #     # v1.4 and above use the class-based edit_model_xml function
+            #     xml = self.env.edit_model_xml(state["model"])
+
+            # self.env.reset_from_xml_string(xml)
+            # self.env.sim.reset()
             if not self._is_v1:
                 # hide teleop visualization after restoring from model
                 self.env.sim.model.site_rgba[self.env.eef_site_id] = np.array(

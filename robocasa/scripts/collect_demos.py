@@ -7,28 +7,28 @@ script.
 """
 
 import argparse
-from copy import deepcopy
 import datetime
 import json
 import os
 import time
+from copy import deepcopy
 from glob import glob
 
 import h5py
 import imageio
 import mujoco
 import numpy as np
+
+import robocasa
+import robocasa.macros as macros
 import robosuite
+from robocasa.models.fixtures import FixtureType
+from robocasa.utils.robomimic.robomimic_dataset_utils import convert_to_robomimic_format
 
 # from robosuite import load_controller_config
 from robosuite.controllers import load_composite_controller_config
 from robosuite.wrappers import DataCollectionWrapper, VisualizationWrapper
 from termcolor import colored
-
-import robocasa
-import robocasa.macros as macros
-from robocasa.models.fixtures import FixtureType
-from robocasa.utils.robomimic.robomimic_dataset_utils import convert_to_robomimic_format
 
 
 def is_empty_input_spacemouse(action_dict):
@@ -213,8 +213,9 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info, excluded_episode
         env_info (str): JSON-encoded string containing environment information,
             including controller and robot info
     """
-
-    hdf5_path = os.path.join(out_dir, "demo.hdf5")
+    t_now = time.time()
+    time_str = datetime.datetime.fromtimestamp(t_now).strftime("%Y-%m-%d-%H-%M-%S")
+    hdf5_path = os.path.join(out_dir, "demo_{}.hdf5".format(time_str))
     print("Saving hdf5 to", hdf5_path)
     f = h5py.File(hdf5_path, "w")
 
@@ -224,68 +225,81 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info, excluded_episode
     num_eps = 0
     env_name = None  # will get populated at some point
 
-    for ep_directory in os.listdir(directory):
-        # print("Processing {} ...".format(ep_directory))
-        if (excluded_episodes is not None) and (ep_directory in excluded_episodes):
-            # print("\tExcluding this episode!")
-            continue
+    # for ep_directory in os.listdir(directory):
+    #     # print("Processing {} ...".format(ep_directory))
+    #     if (excluded_episodes is not None) and (ep_directory in excluded_episodes):
+    #         # print("\tExcluding this episode!")
+    #         continue
+    # for ep_directory in os.listdir(directory):
+    full_ep_path = os.path.join(directory)
+    state_paths = os.path.join(full_ep_path, "state_*.npz")
+    states = []
+    actions = []
+    actions_abs = []
+    meta_data_infos = []
+    # success = False
 
-        state_paths = os.path.join(directory, ep_directory, "state_*.npz")
-        states = []
-        actions = []
-        actions_abs = []
-        # success = False
+    for state_file in sorted(glob(state_paths)):
+        dic = np.load(state_file, allow_pickle=True)
+        env_name = str(dic["env"])
 
-        for state_file in sorted(glob(state_paths)):
-            dic = np.load(state_file, allow_pickle=True)
-            env_name = str(dic["env"])
+        states.extend(dic["states"])
+        for ai in dic["action_infos"]:
+            actions.append(ai["actions"])
+            if "actions_abs" in ai:
+                actions_abs.append(ai["actions_abs"])
 
-            states.extend(dic["states"])
-            for ai in dic["action_infos"]:
-                actions.append(ai["actions"])
-                if "actions_abs" in ai:
-                    actions_abs.append(ai["actions_abs"])
-            # success = success or dic["successful"]
+        meta_data_infos.extend(dic["meta_data_infos"])
+        # success = success or dic["successful"]
 
-        if len(states) == 0:
-            continue
+    # if len(states) == 0:
+    #     continue
 
-        # # Add only the successful demonstration to dataset
-        # if success:
+    # # Add only the successful demonstration to dataset
+    # if success:
 
-        # print("Demonstration is successful and has been saved")
-        # Delete the last state. This is because when the DataCollector wrapper
-        # recorded the states and actions, the states were recorded AFTER playing that action,
-        # so we end up with an extra state at the end.
-        del states[-1]
-        assert len(states) == len(actions)
+    # print("Demonstration is successful and has been saved")
+    # Delete the last state. This is because when the DataCollector wrapper
+    # recorded the states and actions, the states were recorded AFTER playing that action,
+    # so we end up with an extra state at the end.
+    del states[-1]
+    assert len(states) == len(actions)
 
-        num_eps += 1
-        ep_data_grp = grp.create_group("demo_{}".format(num_eps))
+    num_eps += 1
+    ep_data_grp = grp.create_group("demo_{}".format(num_eps))
 
-        # store model xml as an attribute
-        xml_path = os.path.join(directory, ep_directory, "model.xml")
-        with open(xml_path, "r") as f:
-            xml_str = f.read()
-        ep_data_grp.attrs["model_file"] = xml_str
+    # store model xml as an attribute
+    xml_path = os.path.join(directory, "model.xml")
+    with open(xml_path, "r") as f:
+        xml_str = f.read()
+    ep_data_grp.attrs["model_file"] = xml_str
 
-        # store ep meta as an attribute
-        ep_meta_path = os.path.join(directory, ep_directory, "ep_meta.json")
-        if os.path.exists(ep_meta_path):
-            with open(ep_meta_path, "r") as f:
-                ep_meta = f.read()
-            ep_data_grp.attrs["ep_meta"] = ep_meta
+    # store ep meta as an attribute
+    ep_meta_path = os.path.join(directory, "ep_meta.json")
+    if os.path.exists(ep_meta_path):
+        with open(ep_meta_path, "r") as f:
+            ep_meta = f.read()
+        ep_data_grp.attrs["ep_meta"] = ep_meta
 
-        # write datasets for states and actions
-        ep_data_grp.create_dataset("states", data=np.array(states))
-        ep_data_grp.create_dataset("actions", data=np.array(actions))
-        if len(actions_abs) > 0:
-            print(np.array(actions_abs).shape)
-            ep_data_grp.create_dataset("actions_abs", data=np.array(actions_abs))
+    # write datasets for states and actions
+    ep_data_grp.create_dataset("states", data=np.array(states))
+    ep_data_grp.create_dataset("actions", data=np.array(actions))
+    if len(actions_abs) > 0:
+        print(np.array(actions_abs).shape)
+        ep_data_grp.create_dataset("actions_abs", data=np.array(actions_abs))
 
-        # else:
-        #     pass
-        #     # print("Demonstration is unsuccessful and has NOT been saved")
+    if len(meta_data_infos) > 0:
+        for key in meta_data_infos[0]:
+            print(f"Process key {key}")
+            _info = [v[key] for v in meta_data_infos]
+            # 0: reaching
+            # 1: picking
+            # 2: placing
+            ep_data_grp.create_dataset(f"meta_info_{key}", data=np.array(_info))
+
+    # else:
+    #     pass
+    #     # print("Demonstration is unsuccessful and has NOT been saved")
 
     print("{} successful demos so far".format(num_eps))
 
@@ -427,7 +441,7 @@ if __name__ == "__main__":
             )
         mirror_actions = False
         if args.camera is None:
-            args.camera = "agentview"
+            args.camera = "robot0_robotview"
         # special logic: "free" camera corresponds to Null camera
         elif args.camera == "free":
             args.camera = None
@@ -439,12 +453,12 @@ if __name__ == "__main__":
         if args.obj_groups is not None:
             config.update({"obj_groups": args.obj_groups})
         if args.camera is None:
-            args.camera = "robot0_frontview"
+            args.camera = "robot0_robotview"
         # special logic: "free" camera corresponds to Null camera
         elif args.camera == "free":
             args.camera = None
 
-        config["translucent_robot"] = True
+        # config["translucent_robot"] = False
 
         # by default use obj instance split A
         config["obj_instance_split"] = "A"
@@ -455,12 +469,15 @@ if __name__ == "__main__":
     env = robosuite.make(
         **config,
         has_renderer=True,
-        has_offscreen_renderer=False,
+        has_offscreen_renderer=True,
         render_camera=args.camera,
         ignore_done=True,
-        use_camera_obs=False,
+        use_camera_obs=True,
         control_freq=20,
         renderer=args.renderer,
+        camera_heights=84,  # set camera height
+        camera_widths=84,  # set camera width
+        camera_names="robot0_robotview",  # use "agentview" camera
     )
 
     # Wrap this with visualization wrapper
@@ -471,9 +488,9 @@ if __name__ == "__main__":
 
     t_now = time.time()
     time_str = datetime.datetime.fromtimestamp(t_now).strftime("%Y-%m-%d-%H-%M-%S")
-
     if not args.debug:
         # wrap the environment with data collection wrapper
+        breakpoint()
         tmp_directory = "/tmp/{}".format(time_str)
         env = DataCollectionWrapper(env, tmp_directory)
 
@@ -526,4 +543,5 @@ if __name__ == "__main__":
             hdf5_path = gather_demonstrations_as_hdf5(
                 tmp_directory, new_dir, env_info, excluded_episodes=excluded_eps
             )
+            print("Final HDF5 path:", hdf5_path)
             convert_to_robomimic_format(hdf5_path)

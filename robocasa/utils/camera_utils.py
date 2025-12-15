@@ -46,33 +46,33 @@ DEFAULT_LAYOUT_CAM = {
 
 CAM_CONFIGS = dict(
     DEFAULT=dict(
-        robot0_agentview_center=dict(
-            pos=[-0.6, 0.0, 1.15],
-            quat=[
-                0.636945903301239,
-                0.3325185477733612,
-                -0.3199238181114197,
-                -0.6175596117973328,
-            ],
-            parent_body="mobilebase0_support",
-        ),
-        robot0_agentview_left=dict(
-            pos=[-0.5, 0.35, 1.05],
-            quat=[0.55623853, 0.29935253, -0.37678665, -0.6775092],
-            camera_attribs=dict(fovy="60"),
-            parent_body="mobilebase0_support",
-        ),
-        robot0_agentview_right=dict(
-            pos=[-0.5, -0.35, 1.05],
-            quat=[
-                0.6775091886520386,
-                0.3767866790294647,
-                -0.2993525564670563,
-                -0.55623859167099,
-            ],
-            camera_attribs=dict(fovy="60"),
-            parent_body="mobilebase0_support",
-        ),
+        # robot0_agentview_center=dict(
+        #     pos=[-0.6, 0.0, 1.15],
+        #     quat=[
+        #         0.636945903301239,
+        #         0.3325185477733612,
+        #         -0.3199238181114197,
+        #         -0.6175596117973328,
+        #     ],
+        #     parent_body="mobilebase0_support",
+        # ),
+        # robot0_agentview_left=dict(
+        #     pos=[-0.5, 0.35, 1.05],
+        #     quat=[0.55623853, 0.29935253, -0.37678665, -0.6775092],
+        #     camera_attribs=dict(fovy="60"),
+        #     parent_body="mobilebase0_support",
+        # ),
+        # robot0_agentview_right=dict(
+        #     pos=[-0.5, -0.35, 1.05],
+        #     quat=[
+        #         0.6775091886520386,
+        #         0.3767866790294647,
+        #         -0.2993525564670563,
+        #         -0.55623859167099,
+        #     ],
+        #     camera_attribs=dict(fovy="60"),
+        #     parent_body="mobilebase0_support",
+        # ),
         robot0_frontview=dict(
             pos=[-0.50, 0, 0.95],
             quat=[
@@ -84,11 +84,38 @@ CAM_CONFIGS = dict(
             camera_attribs=dict(fovy="60"),
             parent_body="mobilebase0_support",
         ),
-        robot0_eye_in_hand=dict(
-            pos=[0.05, 0, 0],
-            quat=[0, 0.707107, 0.707107, 0],
-            parent_body="robot0_right_hand",
+        robot0_leftview=dict(
+            pos=[0.4, 0.55, 0.5],  # x -> robot forward
+            quat=[0.0, 0.0, 0.7, 1.0],  # good angle
+            camera_attribs=dict(fovy="85"),
+            parent_body="mobilebase0_support",
         ),
+        # robot0_aview=dict(
+        #     pos=[0.4, -0.55, 0.5],  # x -> robot forward
+        #     quat=[0.0, 0.0, 0.7, 1.0],  # good angle
+        #     camera_attribs=dict(fovy="85"),
+        #     parent_body="mobilebase0_support",
+        # ),
+        robot0_rightview=dict(
+            pos=[0.4, -0.55, 0.5],  # x -> robot forward
+            quat=[0.0, 0.0, -0.7, 1.0],  # good angle
+            camera_attribs=dict(fovy="85"),
+            parent_body="mobilebase0_support",
+        ),
+        # robot0_cview=dict(
+        #     pos=[0.4, -0.55, 0.5],  # x -> robot forward
+        #     quat=[0.0, 0.0, -1.0, 0.7],  # good angle
+        #     camera_attribs=dict(fovy="85"),
+        #     parent_body="mobilebase0_support",
+        # ),
+        # <camera name="robot0_frontview" pos="-0.5 0 0.95" quat="0.608894 0.381468 -0.367391 -0.590555" fovy="60"/>
+        # <camera name="robot0_leftview" pos="0.4 0.55 0.5" quat="0 0 0.573462 0.819232" fovy="85"/>
+        # <camera name="robot0_rightview" pos="0.4 -0.55 0.5" quat="0 0 0 1" fovy="85"/>
+        # robot0_eye_in_hand=dict(
+        #     pos=[0.05, 0, 0],
+        #     quat=[0, 0.707107, 0.707107, 0],
+        #     parent_body="robot0_right_hand",
+        # ),
     ),
     ### Add robot specific configs here ####
     PandaMobile=dict(),
