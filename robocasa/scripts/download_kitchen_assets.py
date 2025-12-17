@@ -183,7 +183,7 @@ def download_and_extract_zip(
 
 
 def download_kitchen_assets():
-    ans = input("The script will download ~5 Gb of data. Proceed? (y/n) ")
+    ans = input("The script will download ~20 Gb of data. Proceed? (y/n) ")
     if ans == "y":
         print("Proceeding...")
     else:
@@ -191,8 +191,8 @@ def download_kitchen_assets():
         return
 
     for ds_name, config in DOWNLOAD_ASSET_REGISTRY.items():
-        if ds_name == "aigen_objs":
-            continue  # skip for now, too large to download initially
+        # if ds_name == "aigen_objs":
+        #     continue  # skip for now, too large to download initially
         download_and_extract_zip(**config)
 
 
