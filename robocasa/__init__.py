@@ -277,7 +277,6 @@ from robocasa.environments.kitchen.single_stage.kitchen_pnp import (
     PnPCounterToSink,
     PnPMicrowaveToCounter,
     PnPSinkToCounter,
-    PnPLift,
 )
 from robocasa.environments.kitchen.single_stage.kitchen_sink import (
     TurnOffSinkFaucet,

@@ -224,7 +224,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         horizon=1000,
         ignore_done=True,
         hard_reset=True,
-        camera_names="robot0_robotview",
+        camera_names="agentviewgit ",
         camera_heights=256,
         camera_widths=256,
         camera_depths=False,
@@ -342,8 +342,6 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         super()._load_model()
 
         for robot in self.robots:
-            # breakpoint()
-            # if isinstance(robot.robot_model, PandaOmron):
             import random
 
             qpos_list = [
@@ -486,88 +484,8 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         )
         robot_base_pos[2] += 0.0
         robot_model = self.robots[0].robot_model
-        ##########################################  CHECK FOR COLLISION  ##########################################
-        # # breakpoint()
-        # from mujoco import mj_id2name, mjtObj
-        # from robosuite.utils.binding_utils import MjModel, MjSim
-
-        # mj_model_wrapper = MjModel(robot_model.mujoco_model)
-        # # Generate mapping: body name -> position
-        # body_name_to_pos = {
-        #     mj_model_wrapper.body_id2name(i): robot_model.mujoco_model.body_pos[i]
-        #     for i in range(robot_model.mujoco_model.nbody)
-        #     if mj_model_wrapper.body_id2name(i).startswith(("robot0_right", "robot0_left"))
-        # }
-        # for body in body_name_to_pos:
-        #     pose = body_name_to_pos[body]
-        #     if self.check_fxtr_contact(pose):
-        #         print("Lading robot away from fixture")
-        #         robot_base_pos, robot_base_ori = self.compute_robot_base_placement_pose(
-        #         ref_fixture=ref_fixture, offset=[-0.3, -0.6]
-        #     )
-        #     break
-        # for body in body_name_to_pos:
-        #     pose = body_name_to_pos[body]
-        #     if self.check_fxtr_contact(pose):
-        #         print("Lading robot away from fixture")
-        #         robot_base_pos, robot_base_ori = self.compute_robot_base_placement_pose(
-        #         ref_fixture=ref_fixture, offset=[0.3, -0.6]
-        #     )
-        #     break
-        ##########################################  CHECK FOR COLLISION  ##########################################
-
         robot_model.set_base_xpos(robot_base_pos)
         robot_model.set_base_ori(robot_base_ori)
-        ##########################################  CHECK FOR COLLISION  ##########################################
-        # robot_base_pos, robot_base_ori = self.compute_robot_base_placement_pose(ref_fixture=ref_fixture, offset=[0, -0.65])
-        # robot_model = self.robots[0].robot_model
-
-        # # Generate mapping: body name -> position
-        # from robosuite.utils.binding_utils import MjModel, MjSim
-        # mj_model_wrapper = MjModel(robot_model.mujoco_model)
-        # body_name_to_pos = {
-        #     mj_model_wrapper.body_id2name(i): robot_model.mujoco_model.body_pos[i]
-        #     for i in range(robot_model.mujoco_model.nbody)
-        #     if mj_model_wrapper.body_id2name(i).startswith(("robot0_right"))
-        # }
-        # mj_model_wrapper2 = MjSim(robot_model.mujoco_model)
-        # robot_geom_ids = {
-        #     i for i in range(mj_model_wrapper2.model.ngeom)
-        #     if mj_model_wrapper2.model.geom_bodyid[i] >= 0 and
-        #     mj_model_wrapper2.model.body_id2name(mj_model_wrapper2.model.geom_bodyid[i]).startswith("robot0_right")
-        # }
-
-        # # # First check: if contact is detected, try to move robot with the first offset
-        # contact_detected = False
-        # for body in body_name_to_pos:
-        #     pose = body_name_to_pos[body]
-        #     if self.check_fxtr_contact(pose):
-        #         print(f"Fixture contact detected at position {pose} with fixture: {body}")
-        #         print(f"Collision detected at offset [0, -0.65], trying next...")
-        #         contact_detected = True
-        #         break  # Stop after detecting contact, move robot next
-
-        # # If contact detected, apply first offset change to the robot position
-        # if contact_detected:
-        #     robot_base_pos[0] +=0.3
-        #     robot_base_pos, robot_base_ori = self.compute_robot_base_placement_pose(ref_fixture=ref_fixture, offset=[-0.3, -1.0])
-
-        # # Second check: if still in contact, try moving robot with second offset
-        # for body in body_name_to_pos:
-        #     pose = body_name_to_pos[body]
-        #     if self.check_fxtr_contact(pose):
-        #         print(f"Fixture contact detected at position {pose} with fixture: {body}")
-        #         print(f"Collision detected at offset [-0.3, -0.6], trying next...")
-        #         robot_base_pos, robot_base_ori = self.compute_robot_base_placement_pose(ref_fixture=ref_fixture, offset=[0.3, -0.6])
-        #         break
-
-        # # Set the final robot position and orientation after the checks
-        # robot_model.set_base_xpos(robot_base_pos)
-        # robot_model.set_base_ori(robot_base_ori)
-        ##########################################  CHECK FOR COLLISION  ##########################################
-
-        # create and place objects
-        # breakpoint()
         self._create_objects()
 
         # setup object locations
@@ -589,14 +507,6 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
             self._load_model()
             return
         self.object_placements = object_placements
-        # TODO : Cleanup this code
-        # print("robot base orientation: ", robot_base_ori)
-        # print("Object placements: ", object_placements["obj"][0])
-        # print("Robot base pos: ", robot_base_pos)
-        # print(
-        #     "THESE ARE OBJECT PLACEMENTS: ",
-        #     *[(i, object_placements[i][0]) for i in object_placements.keys()],
-        # )
         delta_list = [-0.1, 0.1, 0.2, -0.2, -0.3, 0.3, -0.4, 0.4]
         existing = self._ep_meta.get("delta_num", [])
 
@@ -614,21 +524,17 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
                 robot_base_pos[0] += (
                     object_placements["obj"][0][0] - robot_base_pos[0]
                 ) + self.delta_num
-                # robot_base_pos[1] -= 0.1 if object_placements["obj"][0][1]<0 else 0.1
             elif object_placements["obj"][0][0] - robot_base_pos[0] < 0:
                 print("Hitting condition where robot moves in -X direction")
                 if object_placements["obj"][0][0] - robot_base_pos[0] < 0:
                     robot_base_pos[0] += (
                         object_placements["obj"][0][0] - robot_base_pos[0]
                     ) + self.delta_num
-                    # robot_base_pos[1] -= 0.1 if object_placements["obj"][0][1]<0 else 0.1
-
                 else:
                     print("Hitting condition where robot moves in +X direction")
                     robot_base_pos[0] -= (
                         object_placements["obj"][0][0] - robot_base_pos[0]
                     ) + self.delta_num
-                    # robot_base_pos[1] -= 0.1 if object_placements["obj"][0][1]<0 else 0.1
         elif robot_base_ori[2] <= 3.15:
             if robot_base_pos[1] - object_placements["obj"][0][1] > 0:
                 print("Hitting condition where robot moves in -Y direction")
@@ -643,17 +549,13 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
                     robot_base_pos[1] -= (
                         robot_base_pos[1] - object_placements["obj"][0][1]
                     ) + self.delta_num
-                    # robot_base_pos[0] -= 0.1 if object_placements["obj"][0][0]<0 else 0.1
                 else:
                     robot_base_pos[1] += (
                         robot_base_pos[1] - object_placements["obj"][0][1]
                     ) + self.delta_num
-                    # robot_base_pos[0] -= 0.1 if object_placements["obj"][0][0]<0 else 0.1
-
         robot_model.set_base_xpos(robot_base_pos)
         robot_model.set_base_ori(robot_base_ori)
         self.robot_rot = robot_base_ori
-        # print("Robot base ORI: ", robot_base_ori)
 
     def _create_objects(self):
         """
@@ -899,7 +801,6 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
 
                 # calculate the size of the inner region where object will actually be placed
                 target_size = placement.get("size", None)
-                # breakpoint()
                 if target_size is not None:
                     target_size = deepcopy(list(target_size))
                     for size_dim in [0, 1]:
@@ -914,7 +815,6 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
                     inner_size = outer_size
 
                 inner_xpos, inner_ypos = placement.get("pos", (None, None))
-                # breakpoint()
                 offset = placement.get("offset", (0.0, 0.0))
 
                 # center inner region within outer region
@@ -1058,10 +958,6 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         fxtrs = [
             fxtr
             for fxtr in self.fixtures.values()
-            # if not isinstance(fxtr, Wall)
-            # and not isinstance(fxtr, Floor)
-            # and not isinstance(fxtr, Stool)
-            # and not isinstance(fxtr, WallAccessory)
             if isinstance(fxtr, Counter)
             or isinstance(fxtr, Stove)
             or isinstance(fxtr, Stovetop)

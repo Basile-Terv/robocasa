@@ -63,7 +63,7 @@ class EnvRobocasa:
             ignore_done=True,
             use_object_obs=True,
             use_camera_obs=use_image_obs,
-            camera_depths=True,
+            camera_depths=False,
         )
         kwargs.update(update_kwargs)
 
