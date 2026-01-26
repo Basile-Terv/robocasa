@@ -7,7 +7,7 @@ import numpy as np
 from robosuite.utils.mjcf_utils import find_elements, string_to_array
 
 import robocasa
-from robocasa.models.objects.kitchen_objects import OBJ_CATEGORIES, OBJ_GROUPS
+from robocasa.models.objects.kitch_min_obj import OBJ_CATEGORIES, OBJ_GROUPS
 
 BASE_ASSET_ZOO_PATH = os.path.join(robocasa.models.assets_root, "objects")
 
@@ -64,10 +64,10 @@ class ObjCat:
         scale=1.0,
         solimp=(0.998, 0.998, 0.001),
         solref=(0.001, 2),
-        density=100,
-        friction=(0.95, 0.3, 0.1),
+        density=50,
+        friction=(2.95, 3.3, 1.1),
         priority=None,
-        aigen_cat=False,
+        aigen_cat=True, #BUG CAUSE: set to False, to be able to create an env, when not having downloaded aigen assets
     ):
         self.name = name
         if not isinstance(types, tuple):
@@ -103,6 +103,7 @@ class ObjCat:
                         continue
                     cat_mjcf_paths.append(os.path.join(root, "model.xml"))
         self.mjcf_paths = sorted(cat_mjcf_paths)
+        # if cat_mjcf_paths == []: breakpoint()
 
     def get_mjcf_kwargs(self):
         """
@@ -143,9 +144,31 @@ for (name, kwargs) in OBJ_CATEGORIES.items():
     OBJ_CATEGORIES[name] = {}
 
     # create instances
+    # breakpoint()
     if objaverse_kwargs is not None:
         objaverse_kwargs.update(common_properties)
         OBJ_CATEGORIES[name]["objaverse"] = ObjCat(name=name, **objaverse_kwargs)
+        large_obj = [
+            "liquor",
+            "jug",
+            "bottled_water",
+            "boxed_food",
+            "cereal",
+            "milk",
+            "spray",
+            "teapot",
+            "jug",
+            "coconut",
+            "lemonade",
+            "squash",
+        ]
+        if OBJ_CATEGORIES[name]["objaverse"].name in large_obj:
+            OBJ_CATEGORIES[name]["objaverse"].scale *= 1.25
+            OBJ_CATEGORIES[name]["objaverse"].density = 25
+        else:
+            OBJ_CATEGORIES[name]["objaverse"].scale *= 1.5
+            OBJ_CATEGORIES[name]["objaverse"].density = 25
+
     if aigen_kwargs is not None:
         aigen_kwargs.update(common_properties)
         OBJ_CATEGORIES[name]["aigen"] = ObjCat(
@@ -166,6 +189,7 @@ def sample_kitchen_object(
     split=None,
     max_size=(None, None, None),
     object_scale=None,
+    sampled_objects=None,
 ):
     """
     Sample a kitchen object from the specified groups and within max_size bounds.
@@ -203,6 +227,8 @@ def sample_kitchen_object(
         dict: info about the sampled object - the path of the mjcf, groups which the object's category belongs to, the category of the object
               the sampling split the object came from, and the groups the object was sampled from
     """
+    if sampled_objects is None:
+        sampled_objects = set()
     valid_object_sampled = False
     while valid_object_sampled is False:
         mjcf_kwargs, info = sample_kitchen_object_helper(
@@ -221,6 +247,12 @@ def sample_kitchen_object(
 
         # check if object size is within bounds
         mjcf_path = info["mjcf_path"]
+        if mjcf_path in sampled_objects:
+            continue  # Skip this object and sample again
+
+        # Add the object to the set of sampled objects
+        sampled_objects.add(mjcf_path)
+
         tree = ET.parse(mjcf_path)
         root = tree.getroot()
         bottom = string_to_array(
@@ -312,10 +344,7 @@ def sample_kitchen_object_helper(
         obj_found = False
         for cand_cat in OBJ_CATEGORIES:
             for reg in obj_registries:
-                if (
-                    reg in OBJ_CATEGORIES[cand_cat]
-                    and mjcf_path in OBJ_CATEGORIES[cand_cat][reg].mjcf_paths
-                ):
+                if reg in OBJ_CATEGORIES[cand_cat]:
                     mjcf_kwargs = OBJ_CATEGORIES[cand_cat][reg].get_mjcf_kwargs()
                     cat = cand_cat
                     obj_found = True

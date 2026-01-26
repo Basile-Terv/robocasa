@@ -9,16 +9,16 @@ class LayoutType(IntEnum):
     Enum for available layouts in RoboCasa environment
     """
 
-    ONE_WALL_SMALL = 0
-    ONE_WALL_LARGE = 1
-    L_SHAPED_SMALL = 2
-    L_SHAPED_LARGE = 3
-    GALLEY = 4
-    U_SHAPED_SMALL = 5
-    U_SHAPED_LARGE = 6
-    G_SHAPED_SMALL = 7
-    G_SHAPED_LARGE = 8
-    WRAPAROUND = 9
+    # ONE_WALL_SMALL = 0
+    ONE_WALL_LARGE = 0
+    # L_SHAPED_SMALL = 2
+    L_SHAPED_LARGE = 1
+    GALLEY = 2
+    # U_SHAPED_SMALL = 5
+    U_SHAPED_LARGE = 3
+    # G_SHAPED_SMALL = 7
+    G_SHAPED_LARGE = 4
+    WRAPAROUND = 5
 
     # negative values correspond to groups (see LAYOUT_GROUPS_TO_IDS)
     ALL = -1
@@ -28,7 +28,7 @@ class LayoutType(IntEnum):
 
 
 LAYOUT_GROUPS_TO_IDS = {
-    -1: list(range(10)),  # all
+    -1: list(range(6)),  # all
     -2: [0, 2, 4, 5, 7],  # no island
     -3: [1, 3, 6, 8, 9],  # island
     -4: [1, 3, 6, 7, 8, 9],  # dining

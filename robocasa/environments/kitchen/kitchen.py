@@ -4,8 +4,19 @@ import xml.etree.ElementTree as ET
 from copy import deepcopy
 
 import numpy as np
+
+import robocasa
+import robocasa.macros as macros
+import robocasa.models.scenes.scene_registry as SceneRegistry
+import robocasa.utils.camera_utils as CamUtils
+import robocasa.utils.object_utils as OU
 import robosuite.utils.transform_utils as T
+from robocasa.models.scenes import KitchenArena
+from robosuite.environments.base import EnvMeta
 from robosuite.environments.manipulation.manipulation_env import ManipulationEnv
+
+from robosuite.models.robots import PandaOmron
+from robosuite.models.robots.robot_model import REGISTERED_ROBOTS
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.errors import RandomizationError
 from robosuite.utils.mjcf_utils import (
@@ -13,22 +24,12 @@ from robosuite.utils.mjcf_utils import (
     find_elements,
     xml_path_completion,
 )
-from robosuite.models.robots.robot_model import REGISTERED_ROBOTS
 from robosuite.utils.observables import Observable, sensor
-from robosuite.environments.base import EnvMeta
 from scipy.spatial.transform import Rotation
-
-from robosuite.models.robots import PandaOmron
-
-import robocasa
-import robocasa.macros as macros
-import robocasa.utils.camera_utils as CamUtils
-import robocasa.utils.object_utils as OU
-import robocasa.models.scenes.scene_registry as SceneRegistry
-from robocasa.models.scenes import KitchenArena
 from robocasa.models.fixtures import *
 from robocasa.models.objects.kitchen_object_utils import sample_kitchen_object
 from robocasa.models.objects.objects import MJCFObject
+from robocasa.utils.config_utils import refactor_composite_controller_config
 from robocasa.utils.placement_samplers import (
     SequentialCompositeSampler,
     UniformRandomSampler,
@@ -40,7 +41,6 @@ from robocasa.utils.texture_swap import (
     replace_floor_texture,
     replace_wall_texture,
 )
-from robocasa.utils.config_utils import refactor_composite_controller_config
 
 
 REGISTERED_KITCHEN_ENVS = {}
@@ -216,7 +216,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         placement_initializer=None,
         has_renderer=False,
         has_offscreen_renderer=True,
-        render_camera="robot0_agentview_center",
+        render_camera="robot0_frontview",
         render_collision_mesh=False,
         render_visual_mesh=True,
         render_gpu_device_id=-1,
@@ -224,7 +224,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         horizon=1000,
         ignore_done=True,
         hard_reset=True,
-        camera_names="agentview",
+        camera_names="agentviewgit ",
         camera_heights=256,
         camera_widths=256,
         camera_depths=False,
@@ -242,6 +242,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         use_distractors=False,
         translucent_robot=False,
         randomize_cameras=False,
+        mode=0,  # mode 0: Eval/MG Mode1:Teleop
     ):
         self.init_robot_base_pos = init_robot_base_pos
 
@@ -249,6 +250,8 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         self.placement_initializer = placement_initializer
         self.obj_registries = obj_registries
         self.obj_instance_split = obj_instance_split
+        self.robot_rot = None
+        self.mode = mode
 
         if layout_and_style_ids is not None:
             assert (
@@ -339,16 +342,40 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         super()._load_model()
 
         for robot in self.robots:
-            if isinstance(robot.robot_model, PandaOmron):
-                robot.init_qpos = (
-                    -0.01612974,
-                    -1.03446714,
-                    -0.02397936,
-                    -2.27550888,
-                    0.03932365,
-                    1.51639493,
-                    0.69615947,
-                )
+            import random
+
+            qpos_list = [
+                0.14936262,
+                -0.65780519,
+                -0.26952777,
+                -2.65130757,
+                0.6578265,
+                2.40055512,
+                0.56525831,
+            ]
+            full_length = 14
+            # Left arm pose to mimic Data collection
+            zeros_tail = [
+                -0.22888404291178063,
+                -1.2542673370642603,
+                -0.7083814475698837,
+                -2.169998025467044,
+                2.797209032264147,
+                2.5609892689297555,
+                -2.773561814962492,
+            ]
+            init_qpos_list = qpos_list + zeros_tail
+
+            num_to_modify = random.randint(1, len(qpos_list))  # between 1 and 7
+
+            indices_to_modify = random.sample(range(len(qpos_list)), num_to_modify)
+            for idx in indices_to_modify:
+                offset = random.uniform(0.1, 0.3)
+                init_qpos_list[idx] = qpos_list[idx] + offset
+
+            # Only assign the new value when the size matched
+            if len(robot.init_qpos) == len(init_qpos_list):
+                robot.init_qpos = tuple(init_qpos_list)
                 robot.init_torso_qpos = np.array([0.0])
 
         # determine sample layout and style
@@ -453,13 +480,12 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
                 break
 
         robot_base_pos, robot_base_ori = self.compute_robot_base_placement_pose(
-            ref_fixture=ref_fixture
+            ref_fixture=ref_fixture, offset=[0.0, 0.0]
         )
+        robot_base_pos[2] += 0.0
         robot_model = self.robots[0].robot_model
         robot_model.set_base_xpos(robot_base_pos)
         robot_model.set_base_ori(robot_base_ori)
-
-        # create and place objects
         self._create_objects()
 
         # setup object locations
@@ -481,6 +507,55 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
             self._load_model()
             return
         self.object_placements = object_placements
+        delta_list = [-0.1, 0.1, 0.2, -0.2, -0.3, 0.3, -0.4, 0.4]
+        existing = self._ep_meta.get("delta_num", [])
+
+        # Filter out existing values
+        available = [d for d in delta_list if d not in existing]
+
+        if available:
+            self.delta_num = random.choice(available)
+        else:
+            self.delta_num = random.choice(delta_list)
+        if robot_base_ori[2] > 3.15 or robot_base_ori[2] < -3.15:
+            if object_placements["obj"][0][0] - robot_base_pos[0] > 0:
+                print("Hitting condition where robot moves in +X direction")
+
+                robot_base_pos[0] += (
+                    object_placements["obj"][0][0] - robot_base_pos[0]
+                ) + self.delta_num
+            elif object_placements["obj"][0][0] - robot_base_pos[0] < 0:
+                print("Hitting condition where robot moves in -X direction")
+                if object_placements["obj"][0][0] - robot_base_pos[0] < 0:
+                    robot_base_pos[0] += (
+                        object_placements["obj"][0][0] - robot_base_pos[0]
+                    ) + self.delta_num
+                else:
+                    print("Hitting condition where robot moves in +X direction")
+                    robot_base_pos[0] -= (
+                        object_placements["obj"][0][0] - robot_base_pos[0]
+                    ) + self.delta_num
+        elif robot_base_ori[2] <= 3.15:
+            if robot_base_pos[1] - object_placements["obj"][0][1] > 0:
+                print("Hitting condition where robot moves in -Y direction")
+                robot_base_pos[1] -= (
+                    robot_base_pos[1] - object_placements["obj"][0][1] - 0.1
+                ) + self.delta_num
+                robot_base_pos[0] -= 0.1 if object_placements["obj"][0][0] < 0 else 0.1
+
+            elif robot_base_pos[1] - object_placements["obj"][0][1] < 0:
+                print("Hitting condition where robot moves in +Y direction")
+                if robot_base_pos[1] - object_placements["obj"][0][1] < 0:
+                    robot_base_pos[1] -= (
+                        robot_base_pos[1] - object_placements["obj"][0][1]
+                    ) + self.delta_num
+                else:
+                    robot_base_pos[1] += (
+                        robot_base_pos[1] - object_placements["obj"][0][1]
+                    ) + self.delta_num
+        robot_model.set_base_xpos(robot_base_pos)
+        robot_model.set_base_ori(robot_base_ori)
+        self.robot_rot = robot_base_ori
 
     def _create_objects(self):
         """
@@ -562,10 +637,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
             set the obj_groups to this path to do deterministic playback
             """
             mjcf_path = cfg["info"]["mjcf_path"]
-            # replace with correct base path
-            new_base_path = os.path.join(robocasa.models.assets_root, "objects")
-            new_path = os.path.join(new_base_path, mjcf_path.split("/objects/")[-1])
-            obj_groups = new_path
+            obj_groups = mjcf_path
             exclude_obj_groups = None
         else:
             obj_groups = cfg.get("obj_groups", "all")
@@ -658,8 +730,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
             or isinstance(base_fixture, Fridge)
             or "stack" in base_fixture.name
         ):
-            base_to_edge[1] -= 0.10
-
+            base_to_edge[1] -= 0.5
         # apply robot-specific offset relative to the base fixture for x,y dims
         robot_model = self.robots[0].robot_model
         robot_class_name = robot_model.__class__.__name__
@@ -682,7 +753,6 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         return robot_base_pos, robot_base_ori
 
     def _get_placement_initializer(self, cfg_list, z_offset=0.01):
-
         """
         Creates a placement initializer for the objects/fixtures based on the specifications in the configurations list
 
@@ -700,7 +770,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
             name="SceneSampler", rng=self.rng
         )
 
-        for (obj_i, cfg) in enumerate(cfg_list):
+        for obj_i, cfg in enumerate(cfg_list):
             # determine which object is being placed
             if cfg["type"] == "fixture":
                 mj_obj = self.fixtures[cfg["name"]]
@@ -851,7 +921,6 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
                 )
                 site_tree = ET.fromstring(site_str)
                 self.model.worldbody.append(site_tree)
-
             placement_initializer.append_sampler(
                 sampler=UniformRandomSampler(
                     name="{}_Sampler".format(cfg["name"]),
@@ -875,6 +944,46 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
             )
 
         return placement_initializer
+
+    def check_fxtr_contact(self, pos):
+        """
+        Check if the point is in contact with any fixture
+
+        Args:
+            pos (tuple): The position of the point to check
+
+        Returns:
+            bool: True if the point is in contact with any fixture, False otherwise
+        """
+        fxtrs = [
+            fxtr
+            for fxtr in self.fixtures.values()
+            if isinstance(fxtr, Counter)
+            or isinstance(fxtr, Stove)
+            or isinstance(fxtr, Stovetop)
+            or isinstance(fxtr, HousingCabinet)
+            or isinstance(fxtr, SingleCabinet)
+            or isinstance(fxtr, HingeCabinet)
+            or isinstance(fxtr, Drawer)
+            or isinstance(fxtr, OpenCabinet)
+            or isinstance(fxtr, Fridge)
+            or isinstance(fxtr, Dishwasher)
+            or isinstance(fxtr, Sink)
+            or isinstance(fxtr, Stovetop)
+            or isinstance(fxtr, Hood)
+            or isinstance(fxtr, Microwave)
+            or isinstance(fxtr, CoffeeMachine)
+            or isinstance(fxtr, Toaster)
+            or isinstance(fxtr, Oven)
+        ]
+        for fxtr in fxtrs:
+            # get bounds of fixture
+            if OU.point_in_fixture(point=pos, fixture=fxtr, only_2d=True):
+                print(
+                    f"Fixture contact detected at position {pos} with fixture: {fxtr}"
+                )
+                return True
+        return False
 
     def _reset_internal(self):
         """
@@ -930,7 +1039,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
 
         def copy_dict_for_json(orig_dict):
             new_dict = {}
-            for (k, v) in orig_dict.items():
+            for k, v in orig_dict.items():
                 if isinstance(v, dict):
                     new_dict[k] = copy_dict_for_json(v)
                 elif isinstance(v, Fixture):
@@ -952,6 +1061,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
             {k: v.name for (k, v) in self.fixture_refs.items()}
         )
         ep_meta["cam_configs"] = deepcopy(self._cam_configs)
+        # ep_meta["object_poses"] = self.object_placements["obj"][0]
 
         return ep_meta
 
@@ -978,7 +1088,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         if self.randomize_cameras:
             self._randomize_cameras()
 
-        for (cam_name, cam_cfg) in self._cam_configs.items():
+        for cam_name, cam_cfg in self._cam_configs.items():
             if cam_cfg.get("parent_body", None) is not None:
                 continue
 
@@ -1099,7 +1209,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
 
             cam.set("pos", array_to_string(cam_config["pos"]))
             cam.set("quat", array_to_string(cam_config["quat"]))
-            for (k, v) in cam_config.get("camera_attribs", {}).items():
+            for k, v in cam_config.get("camera_attribs", {}).items():
                 cam.set(k, v)
 
         # replace base -> mobilebase (this is needed for old PandaOmron demos)
@@ -1176,7 +1286,7 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
         super()._setup_references()
 
         self.obj_body_id = {}
-        for (name, model) in self.objects.items():
+        for name, model in self.objects.items():
             self.obj_body_id[name] = self.sim.model.body_name2id(model.root_body)
 
     def _setup_observables(self):
@@ -1608,7 +1718,6 @@ class KitchenDemo(Kitchen):
     ):
         self.obj_groups = obj_groups
         self.num_objs = num_objs
-
         super().__init__(init_robot_base_pos=init_robot_base_pos, *args, **kwargs)
 
     def _get_obj_cfgs(self):

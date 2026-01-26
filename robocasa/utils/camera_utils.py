@@ -23,12 +23,6 @@ LAYOUT_CAMS = {
         azimuth=51.67880851867874,
         elevation=-13.302619131542388,
     ),
-    # 3: dict(
-    #     lookat=[11.44842548, -11.47664723, 11.24115989],
-    #     distance=43.923271794728187,
-    #     azimuth=227.12928449329333,
-    #     elevation=-16.495686334624907,
-    # ),
     4: dict(
         lookat=[1.6, -1.0, 1.0],
         distance=5,
@@ -46,33 +40,6 @@ DEFAULT_LAYOUT_CAM = {
 
 CAM_CONFIGS = dict(
     DEFAULT=dict(
-        robot0_agentview_center=dict(
-            pos=[-0.6, 0.0, 1.15],
-            quat=[
-                0.636945903301239,
-                0.3325185477733612,
-                -0.3199238181114197,
-                -0.6175596117973328,
-            ],
-            parent_body="mobilebase0_support",
-        ),
-        robot0_agentview_left=dict(
-            pos=[-0.5, 0.35, 1.05],
-            quat=[0.55623853, 0.29935253, -0.37678665, -0.6775092],
-            camera_attribs=dict(fovy="60"),
-            parent_body="mobilebase0_support",
-        ),
-        robot0_agentview_right=dict(
-            pos=[-0.5, -0.35, 1.05],
-            quat=[
-                0.6775091886520386,
-                0.3767866790294647,
-                -0.2993525564670563,
-                -0.55623859167099,
-            ],
-            camera_attribs=dict(fovy="60"),
-            parent_body="mobilebase0_support",
-        ),
         robot0_frontview=dict(
             pos=[-0.50, 0, 0.95],
             quat=[
@@ -84,10 +51,18 @@ CAM_CONFIGS = dict(
             camera_attribs=dict(fovy="60"),
             parent_body="mobilebase0_support",
         ),
-        robot0_eye_in_hand=dict(
-            pos=[0.05, 0, 0],
-            quat=[0, 0.707107, 0.707107, 0],
-            parent_body="robot0_right_hand",
+        # This is the camera that is used for the robot's "left view" in the experiment
+        robot0_leftview=dict(
+            pos=[0.4, 0.55, 0.5],  # x -> robot forward
+            quat=[0.0, 0.0, 0.7, 1.0],  # good angle
+            camera_attribs=dict(fovy="85"),
+            parent_body="mobilebase0_support",
+        ),
+        robot0_rightview=dict(
+            pos=[0.4, -0.55, 0.5],  # x -> robot forward
+            quat=[0.0, 0.0, -0.7, 1.0],  # good angle
+            camera_attribs=dict(fovy="85"),
+            parent_body="mobilebase0_support",
         ),
     ),
     ### Add robot specific configs here ####
